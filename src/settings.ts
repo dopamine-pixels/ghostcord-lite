@@ -34,12 +34,9 @@ async function save() {
     theme_css: $<HTMLTextAreaElement>("theme_css").value.trim() || null
   };
   await invoke("save_config", { cfg });
+  await invoke("apply_config_to_main", { cfg });
 
-  // ping main window to re-apply
-  // parent is not always set; fallback to event broadcast
-  // easiest: use a global event
-  const { emit } = await import("@tauri-apps/api/event");
-  await emit("config-changed", cfg);
+  // apply via backend to avoid webview event permission issues
 }
 
 $<HTMLButtonElement>("theme_pick").addEventListener("click", async () => {

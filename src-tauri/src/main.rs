@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{WebviewUrl, WebviewWindowBuilder};
+use std::sync::Mutex;
+
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod commands;
 mod config;
@@ -8,11 +10,15 @@ mod config;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(commands::ConfigState(Mutex::new(
+            config::AppConfig::default(),
+        )))
         .invoke_handler(tauri::generate_handler![
             commands::load_config,
             commands::save_config,
             commands::read_theme_file,
-            commands::pick_theme_file
+            commands::pick_theme_file,
+            commands::apply_config_to_main
         ])
         .setup(|app| {
             // This script is injected into EVERY page load, before any JS runs
@@ -112,19 +118,6 @@ fn main() {
       return;
     }
 
-    if (cfg.theme_path && cfg.theme_path.trim()) {
-      try {
-        const css = await window.__TAURI__?.core?.invoke("read_theme_file", {
-          path: cfg.theme_path
-        });
-        if (css) injectStyle(THEME_STYLE_ID, css);
-      } catch (err) {
-        console.warn("[Ghostcord] failed to read theme file", err);
-        removeStyle(THEME_STYLE_ID);
-      }
-      return;
-    }
-
     removeStyle(THEME_STYLE_ID);
   }
 
@@ -145,23 +138,18 @@ fn main() {
     }
   }
 
+  function applyAllFromConfig(cfg) {
+    applyPerfFromConfig(cfg);
+    applyThemeFromConfig(cfg);
+  }
+
+  window.__GHOSTCORD_APPLY_CONFIG__ = (cfg) => {
+    applyAllFromConfig(cfg);
+  };
+
   // Initial apply
   ensureRuntime();
   applyPerfCss();
-
-  async function loadAndApplyConfig() {
-    const invoke = window.__TAURI__?.core?.invoke;
-    if (!invoke) return;
-    try {
-      const cfg = await invoke("load_config");
-      applyPerfFromConfig(cfg);
-      await applyThemeFromConfig(cfg);
-    } catch (err) {
-      console.warn("[Ghostcord] failed to load config", err);
-    }
-  }
-
-  loadAndApplyConfig();
 
   // Re-apply after SPA navigation
   const push = history.pushState;
@@ -178,14 +166,6 @@ fn main() {
     if (window.__GHOSTCORD__?.perfEnabled) applyPerfCss();
   });
 
-  const eventApi = window.__TAURI__?.event;
-  if (eventApi?.listen) {
-    eventApi.listen("config-changed", (evt) => {
-      const cfg = evt?.payload;
-      applyPerfFromConfig(cfg);
-      applyThemeFromConfig(cfg);
-    });
-  }
 })();
 "#;
 
@@ -200,6 +180,13 @@ fn main() {
             .resizable(true)
             .initialization_script(ghostcord_init)
             .build()?;
+
+            if let Ok(cfg) = commands::load_config(
+                app.handle().clone(),
+                app.state::<commands::ConfigState>(),
+            ) {
+                let _ = commands::apply_config_to_main(app.handle().clone(), cfg);
+            }
 
             Ok(())
         })

@@ -84,3 +84,36 @@ pub fn pick_theme_file(app: AppHandle) -> Option<String> {
             FilePath::Url(url) => Some(url.to_string()),
         })
 }
+
+#[tauri::command]
+pub fn apply_config_to_main(app: AppHandle, cfg: AppConfig) -> Result<(), String> {
+    let mut cfg = cfg.sanitize();
+    if cfg.theme_css.is_none() {
+        if let Some(path) = cfg.theme_path.as_deref() {
+            if let Ok(contents) = fs::read_to_string(path) {
+                cfg.theme_css = Some(contents);
+            }
+        }
+    }
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    let payload = serde_json::to_string(&cfg)
+        .map_err(|e| e.to_string())?;
+    let script = format!(
+        r#"
+(() => {{
+  try {{
+    const cfg = {payload};
+    if (window.__GHOSTCORD_APPLY_CONFIG__) {{
+      window.__GHOSTCORD_APPLY_CONFIG__(cfg);
+    }}
+  }} catch (e) {{
+    console.warn("[Ghostcord] apply_config_to_main failed", e);
+  }}
+}})();
+"#
+    );
+    window.eval(&script).map_err(|e| e.to_string())?;
+    Ok(())
+}
