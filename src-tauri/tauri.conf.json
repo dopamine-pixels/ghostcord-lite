@@ -1,0 +1,19 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+
+  "productName": "Ghostcord Lite",
+  "version": "0.1.0",
+  "identifier": "com.ghostcord.lite",
+
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    }
+  }
+}

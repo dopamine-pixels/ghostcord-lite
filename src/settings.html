@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Settings</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      .row { display:flex; align-items:center; justify-content:space-between; gap: 8px; margin: 10px 0; }
+      input[type="text"], textarea { width: 100%; padding: 8px; }
+      .row input[type="text"] { flex: 1; width: auto; }
+      textarea { resize: vertical; }
+      button { padding: 8px 12px; }
+      .small { opacity: 0.75; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h2>Ghostcord Lite</h2>
+
+    <div class="row">
+      <label>Enable blockers</label>
+      <input id="enable_blockers" type="checkbox" />
+    </div>
+
+    <div class="row">
+      <label>Enable performance CSS</label>
+      <input id="enable_perf_css" type="checkbox" />
+    </div>
+
+    <div class="row">
+      <label>Enable Vencord mode (optional)</label>
+      <input id="enable_vencord" type="checkbox" />
+    </div>
+
+    <hr />
+
+    <div class="row">
+      <label>Enable BetterDiscord CSS</label>
+      <input id="enable_theme" type="checkbox" />
+    </div>
+
+    <div>
+      <label>Theme file path (.theme.css)</label>
+      <div class="row">
+        <input id="theme_path" type="text" placeholder="C:\...\MyTheme.theme.css" />
+        <button id="theme_pick" type="button">Pick file</button>
+      </div>
+      <p class="small">Leave blank to use pasted CSS instead.</p>
+    </div>
+
+    <div>
+      <label>Theme CSS (optional)</label>
+      <textarea id="theme_css" rows="6" placeholder="Paste BetterDiscord theme CSS here"></textarea>
+      <p class="small">If filled, this takes priority over the file path.</p>
+    </div>
+
+    <div class="row">
+      <button id="save">Save</button>
+      <button id="close">Close</button>
+    </div>
+
+    <script type="module" src="/settings.ts"></script>
+  </body>
+</html>
