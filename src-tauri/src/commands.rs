@@ -121,16 +121,36 @@ pub fn apply_config_to_main(app: AppHandle, cfg: AppConfig) -> Result<(), String
 #[tauri::command]
 pub fn open_settings(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("settings") {
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
+        window.close().map_err(|e| e.to_string())?;
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+    let window = WebviewWindowBuilder::new(
+        &app,
+        "settings",
+        WebviewUrl::App("settings.html".into()),
+    )
         .title("Ghostcord Settings")
         .inner_size(560.0, 620.0)
         .resizable(true)
+        .initialization_script(
+            "console.log('[Ghostcord] settings window init');",
+        )
+        .on_navigation(|url| {
+            let s = url.as_str();
+            s.starts_with("app://")
+                || s.starts_with("http://localhost:")
+                || s.starts_with("http://127.0.0.1:")
+                || s.starts_with("http://[::1]:")
+        })
         .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if cfg!(debug_assertions) {
+        window.open_devtools();
+    }
+    window.set_focus().map_err(|e| e.to_string())?;
+    let _ = window.eval("console.log('[Ghostcord] settings url', location.href)");
+
+    Ok(())
 }

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 type AppConfig = {
   theme_path: string | null;
@@ -46,7 +46,12 @@ $<HTMLButtonElement>("theme_pick").addEventListener("click", async () => {
 
 $<HTMLButtonElement>("save").addEventListener("click", save);
 $<HTMLButtonElement>("close").addEventListener("click", async () => {
-  await getCurrentWindow().hide();
+  const window = getCurrentWebviewWindow();
+  try {
+    await window.close();
+  } catch {
+    await window.hide();
+  }
 });
 
 load();

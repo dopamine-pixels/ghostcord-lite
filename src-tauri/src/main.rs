@@ -274,6 +274,8 @@ fn main() {
 
 
             let app_handle = app.handle().clone();
+            
+            // Build the main Discord window
             WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -283,21 +285,29 @@ fn main() {
             .inner_size(1100.0, 780.0)
             .resizable(true)
             .on_navigation(move |url| {
-                if url.as_str() == "https://ghostcord.local/settings" {
+                let url_str = url.as_str();
+                
+                // Handle settings navigation
+                if url_str == "https://ghostcord.local/settings" {
                     let _ = commands::open_settings(app_handle.clone());
                     return false;
                 }
-                if url.as_str() == "https://ghostcord.local/devtools" {
+                
+                // Handle devtools navigation
+                if url_str == "https://ghostcord.local/devtools" {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         window.open_devtools();
                     }
                     return false;
                 }
+                
+                // Allow all Discord URLs
                 true
             })
             .initialization_script(ghostcord_init)
             .build()?;
 
+            // Load config and apply to main window
             if let Ok(cfg) = commands::load_config(
                 app.handle().clone(),
                 app.state::<commands::ConfigState>(),
