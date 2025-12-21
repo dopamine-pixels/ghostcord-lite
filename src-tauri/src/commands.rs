@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::config::AppConfig;
@@ -115,42 +115,5 @@ pub fn apply_config_to_main(app: AppHandle, cfg: AppConfig) -> Result<(), String
 "#
     );
     window.eval(&script).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn open_settings(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("settings") {
-        window.close().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    let window = WebviewWindowBuilder::new(
-        &app,
-        "settings",
-        WebviewUrl::App("settings.html".into()),
-    )
-        .title("Ghostcord Settings")
-        .inner_size(560.0, 620.0)
-        .resizable(true)
-        .initialization_script(
-            "console.log('[Ghostcord] settings window init');",
-        )
-        .on_navigation(|url| {
-            let s = url.as_str();
-            s.starts_with("app://")
-                || s.starts_with("http://localhost:")
-                || s.starts_with("http://127.0.0.1:")
-                || s.starts_with("http://[::1]:")
-        })
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    if cfg!(debug_assertions) {
-        window.open_devtools();
-    }
-    window.set_focus().map_err(|e| e.to_string())?;
-    let _ = window.eval("console.log('[Ghostcord] settings url', location.href)");
-
     Ok(())
 }
