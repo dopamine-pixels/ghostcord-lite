@@ -15,5 +15,10 @@
     "security": {
       "csp": null
     }
+  },
+  "bundle": {
+    "resources": [
+      "src/injection/ghostcord_init.js"
+    ]
   }
 }

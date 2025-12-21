@@ -1,68 +1,61 @@
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::fs;
 
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-use crate::config::AppConfig;
-
-pub struct ConfigState(pub Mutex<AppConfig>);
-
-fn config_path(app: &AppHandle) -> PathBuf {
-    let dir = app
-        .path()
-        .app_config_dir()
-        .expect("failed to resolve app config dir");
-
-    let _ = fs::create_dir_all(&dir);
-    dir.join("config.json")
-}
+use crate::{config::AppConfig, settings, state};
 
 #[tauri::command]
 pub fn load_config(
     app: AppHandle,
-    state: State<ConfigState>,
+    store: State<settings::SettingsStore>,
 ) -> Result<AppConfig, String> {
-    let path = config_path(&app);
-
-    let cfg = if path.exists() {
-        let contents = fs::read_to_string(&path)
-            .map_err(|e| e.to_string())?;
-
-        serde_json::from_str::<AppConfig>(&contents)
-            .map_err(|e| e.to_string())?
-    } else {
-        AppConfig::default()
-    };
-
-    let cfg = cfg.sanitize();
-    *state.0.lock().unwrap() = cfg.clone();
-
-    Ok(cfg)
+    settings::load_settings(&app, &store)
 }
 
 #[tauri::command]
 pub fn save_config(
     app: AppHandle,
-    state: State<ConfigState>,
+    store: State<settings::SettingsStore>,
     cfg: AppConfig,
 ) -> Result<(), String> {
-    let cfg = cfg.sanitize();
-    let path = config_path(&app);
-
-    let json = serde_json::to_string_pretty(&cfg)
-        .map_err(|e| e.to_string())?;
-
-    fs::write(&path, json)
-        .map_err(|e| e.to_string())?;
-
-    *state.0.lock().unwrap() = cfg;
+    let _ = settings::save_settings(&app, &store, cfg)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn read_theme_file(path: String) -> Result<String, String> {
-    fs::read_to_string(path)
-        .map_err(|e| e.to_string())
+pub fn get_settings(
+    store: State<settings::SettingsStore>,
+) -> Result<AppConfig, String> {
+    Ok(store.get())
+}
+
+#[tauri::command]
+pub fn set_settings(
+    app: AppHandle,
+    store: State<settings::SettingsStore>,
+    cfg: AppConfig,
+) -> Result<AppConfig, String> {
+    let cfg = settings::save_settings(&app, &store, cfg)?;
+    let _ = apply_config_to_main(app, cfg.clone());
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub fn load_state(
+    app: AppHandle,
+    store: State<state::StateStore>,
+) -> Result<state::AppState, String> {
+    state::load_state(&app, &store)
+}
+
+#[tauri::command]
+pub fn save_state(
+    app: AppHandle,
+    store: State<state::StateStore>,
+    app_state: state::AppState,
+) -> Result<(), String> {
+    state::save_state(&app, &store, app_state)
 }
 
 #[tauri::command]
