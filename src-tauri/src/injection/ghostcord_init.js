@@ -54,6 +54,9 @@
       window.__GHOSTCORD__ = {
         injectedAt: performance.now(),
         perfEnabled: true,
+        blockersEnabled: false,
+        blockersInstalled: false,
+        blockersOriginals: null,
         currentConfig: null
       };
     }
@@ -89,8 +92,136 @@
     ensureRuntime();
     const enabled = !!(cfg?.enable_vencord);
     if (enabled && !window.__GHOSTCORD__.vencordLoaded) {
-      console.warn("[Ghostcord] Vencord mode enabled (stub). Implement loader here.");
+      if (!window.__TAURI__?.core?.invoke) return;
       window.__GHOSTCORD__.vencordLoaded = true;
+      window.__TAURI__.core
+        .invoke('apply_vencord_to_main')
+        .catch((err) => {
+          window.__GHOSTCORD__.vencordLoaded = false;
+          console.warn('[Ghostcord] Vencord loader failed', err);
+        });
+    }
+  }
+
+  function getUrlString(input) {
+    if (!input) return '';
+    if (typeof input === 'string') return input;
+    if (input.url) return input.url;
+    return '';
+  }
+
+  function isBlockedUrl(url, method) {
+    if (!url) return false;
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const host = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.toLowerCase();
+      const blockedHost = host.includes('discord.com') || host.includes('discordapp.com');
+      if (!blockedHost && !host.includes('sentry.io') && !host.includes('sentry.discord')) {
+        return false;
+      }
+      if (host.includes('sentry.io') || host.includes('sentry.discord')) {
+        return true;
+      }
+      if (method && method.toUpperCase() !== 'POST') {
+        return false;
+      }
+      return (
+        /\/api\/v\d+\/science\b/.test(pathname) ||
+        /\/api\/v\d+\/track\b/.test(pathname) ||
+        /\/api\/v\d+\/users\/@me\/analytics\b/.test(pathname) ||
+        /\/api\/v\d+\/applications\/\d+\/analytics\b/.test(pathname)
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function installBlockers() {
+    ensureRuntime();
+    if (window.__GHOSTCORD__.blockersInstalled) return;
+
+    const originals = {
+      fetch: window.fetch,
+      xhrOpen: window.XMLHttpRequest && window.XMLHttpRequest.prototype.open,
+      xhrSend: window.XMLHttpRequest && window.XMLHttpRequest.prototype.send,
+      sendBeacon: navigator.sendBeacon
+    };
+
+    window.fetch = function(input, init) {
+      try {
+        const url = getUrlString(input);
+        const method = init?.method || input?.method;
+        if (isBlockedUrl(url, method)) {
+          console.warn('[Ghostcord] Blocked fetch:', url);
+          return Promise.resolve(new Response('', { status: 204 }));
+        }
+      } catch (err) {
+        console.warn('[Ghostcord] fetch blocker error', err);
+      }
+      return originals.fetch.call(this, input, init);
+    };
+
+    if (window.XMLHttpRequest && originals.xhrOpen && originals.xhrSend) {
+      window.XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+        try {
+          this.__ghostcord_method = method;
+          this.__ghostcord_blocked = isBlockedUrl(url, method);
+          if (this.__ghostcord_blocked) {
+            console.warn('[Ghostcord] Blocked XHR:', url);
+          }
+        } catch (err) {
+          console.warn('[Ghostcord] XHR open blocker error', err);
+        }
+        return originals.xhrOpen.call(this, method, url, async, user, password);
+      };
+      window.XMLHttpRequest.prototype.send = function(body) {
+        if (this.__ghostcord_blocked) {
+          try {
+            this.abort();
+          } catch (_) {}
+          return;
+        }
+        return originals.xhrSend.call(this, body);
+      };
+    }
+
+    if (originals.sendBeacon) {
+      navigator.sendBeacon = function(url, data) {
+        try {
+          if (isBlockedUrl(url, 'POST')) {
+            console.warn('[Ghostcord] Blocked beacon:', url);
+            return true;
+          }
+        } catch (err) {
+          console.warn('[Ghostcord] beacon blocker error', err);
+        }
+        return originals.sendBeacon.call(this, url, data);
+      };
+    }
+
+    window.__GHOSTCORD__.blockersOriginals = originals;
+    window.__GHOSTCORD__.blockersInstalled = true;
+  }
+
+  function uninstallBlockers() {
+    ensureRuntime();
+    if (!window.__GHOSTCORD__.blockersInstalled) return;
+    const originals = window.__GHOSTCORD__.blockersOriginals;
+    if (originals?.fetch) window.fetch = originals.fetch;
+    if (originals?.xhrOpen) window.XMLHttpRequest.prototype.open = originals.xhrOpen;
+    if (originals?.xhrSend) window.XMLHttpRequest.prototype.send = originals.xhrSend;
+    if (originals?.sendBeacon) navigator.sendBeacon = originals.sendBeacon;
+    window.__GHOSTCORD__.blockersInstalled = false;
+  }
+
+  function applyBlockersFromConfig(cfg) {
+    ensureRuntime();
+    window.__GHOSTCORD__.blockersEnabled = !!(cfg?.enable_blockers);
+    if (window.__GHOSTCORD__.blockersEnabled) {
+      installBlockers();
+    } else {
+      uninstallBlockers();
     }
   }
 
@@ -99,6 +230,7 @@
     applyPerfFromConfig(cfg);
     applyThemeFromConfig(cfg);
     applyVencordFromConfig(cfg);
+    applyBlockersFromConfig(cfg);
   }
 
   window.__GHOSTCORD_APPLY_CONFIG__ = applyAllFromConfig;
@@ -296,6 +428,9 @@
           <div class="switch-slider"></div>
         </div>
       </div>
+      <div class="setting-label-desc" style="margin-top: 6px;">
+        Vencord is GPL-3.0. Source: <a href="https://github.com/Vencord/Vencord" target="_blank" rel="noreferrer">github.com/Vencord/Vencord</a>
+      </div>
 
       <div class="button-row">
         <button class="btn-primary" id="btn-save">Save & Apply</button>
@@ -342,6 +477,24 @@
       console.error('[Ghostcord] Failed to load config:', err);
       showStatus('Failed to load settings', true);
     }
+  }
+
+  function applyConfigToUI(cfg) {
+    if (!cfg) return;
+    const toggleSwitch = (id, value) => {
+      const sw = document.getElementById(id);
+      if (sw) sw.classList.toggle('active', !!value);
+    };
+
+    toggleSwitch('switch-blockers', cfg.enable_blockers);
+    toggleSwitch('switch-perf', cfg.enable_perf_css);
+    toggleSwitch('switch-theme', cfg.enable_theme);
+    toggleSwitch('switch-vencord', cfg.enable_vencord);
+
+    const pathInput = document.getElementById('theme-path');
+    const cssInput = document.getElementById('theme-css');
+    if (pathInput) pathInput.value = cfg.theme_path || '';
+    if (cssInput) cssInput.value = cfg.theme_css || '';
   }
 
   async function saveConfigFromUI() {
@@ -549,9 +702,11 @@
     }, true);
   }
 
+
   // Initialize
   ensureRuntime();
   applyPerfCss();
+  applyBlockersFromConfig(window.__GHOSTCORD__.currentConfig);
   
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {

@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 use crate::{ipc, settings, state, windows};
 
 pub fn run() {
@@ -9,7 +11,13 @@ pub fn run() {
         .invoke_handler(ipc::handler())
         .setup(|app| {
             settings::log_paths(app.handle());
-            windows::create_main_window(app.handle())?;
+            let state_store = app.state::<state::StateStore>();
+            let _ = state::load_state(app.handle(), &state_store);
+
+            let window = windows::create_main_window(app.handle())?;
+            windows::restore_main_window_state(&window, &state_store);
+            windows::attach_main_window_state_listeners(app.handle(), &window);
+
             ipc::apply_initial_config(app.handle())?;
             Ok(())
         })

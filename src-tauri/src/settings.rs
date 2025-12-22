@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config::AppConfig;
 
@@ -92,7 +92,7 @@ pub fn save_settings(
 }
 
 pub fn emit_settings_changed(app: &AppHandle, cfg: &AppConfig) {
-    if let Err(err) = app.emit_all(SETTINGS_CHANGED_EVENT, cfg) {
+    if let Err(err) = app.emit(SETTINGS_CHANGED_EVENT, cfg) {
         log::warn!("Failed to emit settings change event: {err}");
     }
 }

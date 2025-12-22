@@ -12,6 +12,8 @@ pub fn handler() -> impl Fn(Invoke<tauri::Wry>) -> bool + Send + Sync {
         commands::apply_config_to_main,
         commands::load_state,
         commands::save_state,
+        commands::ensure_vencord_assets,
+        commands::apply_vencord_to_main,
     ]
 }
 

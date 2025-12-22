@@ -3,7 +3,7 @@ use std::fs;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-use crate::{config::AppConfig, settings, state};
+use crate::{config::AppConfig, settings, state, vencord};
 
 #[tauri::command]
 pub fn load_config(
@@ -56,6 +56,49 @@ pub fn save_state(
     app_state: state::AppState,
 ) -> Result<(), String> {
     state::save_state(&app, &store, app_state)
+}
+
+#[tauri::command]
+pub async fn ensure_vencord_assets(
+    app: AppHandle,
+) -> Result<vencord::VencordAssets, String> {
+    vencord::ensure_vencord_assets(&app).await
+}
+
+#[tauri::command]
+pub async fn apply_vencord_to_main(
+    app: AppHandle,
+) -> Result<(), String> {
+    let assets = vencord::ensure_vencord_assets(&app).await?;
+    let preload = fs::read_to_string(&assets.preload_path).map_err(|e| e.to_string())?;
+    let main = fs::read_to_string(&assets.main_path).map_err(|e| e.to_string())?;
+
+    let preload_js = serde_json::to_string(&preload).map_err(|e| e.to_string())?;
+    let main_js = serde_json::to_string(&main).map_err(|e| e.to_string())?;
+
+    let script = format!(
+        r#"
+(() => {{
+  try {{
+    if (window.__GHOSTCORD_VENCORD_LOADED__) return;
+    window.__GHOSTCORD_VENCORD_LOADED__ = true;
+    const preload = {preload_js};
+    const main = {main_js};
+    (0, eval)(preload);
+    (0, eval)(main);
+    console.log("[Ghostcord] Vencord injected");
+  }} catch (e) {{
+    console.warn("[Ghostcord] Vencord injection failed", e);
+  }}
+}})();
+"#
+    );
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    window.eval(&script).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]

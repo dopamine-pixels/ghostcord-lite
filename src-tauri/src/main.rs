@@ -6,6 +6,7 @@ mod config;
 mod ipc;
 mod settings;
 mod state;
+mod vencord;
 mod windows;
 
 fn main() {

@@ -23,5 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Checkpoint
+# Terribly Organized Crap
 CODEX_CHECKPOINT.md
+/dev-test/
